@@ -1,1 +1,5 @@
-flask\nedge-tts\nrequests\ngunicorn\npyngrok
+flask
+edge-tts
+requests
+gunicorn
+pyngrok
