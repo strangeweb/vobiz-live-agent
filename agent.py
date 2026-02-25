@@ -13,7 +13,7 @@ import static_ffmpeg
 static_ffmpeg.add_paths()
 import speech_recognition as sr
 from pydub import AudioSegment
-from datetime import datetime
+from datetime import datetimef
 import edge_tts
 from flask import Flask, request, send_file, url_for, render_template, jsonify, session, redirect
 
@@ -87,10 +87,10 @@ def generate_call_summary(call_sid):
 Conversation: {conv_text}
 
 Response format (JSON only):
-{{
+{
   "summary": "Short 1-sentence summary",
   "status": "Hot" | "Warm" | "Cold"
-}}
+}
 
 Rules:
 - Hot: User is very interested, asked for prices, or wants to buy.
@@ -101,12 +101,12 @@ Rules:
         try:
             url = "https://api.groq.com/openai/v1/chat/completions"
             headers = {"Authorization": f"Bearer {GROQ_API_KEY}", "Content-Type": "application/json"}
-            data = {{
+            data = {
                 "model": "llama-3.1-8b-instant",
-                "messages": [{{"role": "user", "content": prompt}}],
+                "messages": [{"role": "user", "content": prompt}],
                 "max_tokens": 150,
-                "response_format": {{"type": "json_object"}}
-            }}
+                "response_format": {"type": "json_object"}
+            }
             # Skipping implementation in JS for brevity, just defining the string here
         except Exception as e:
             print(f"Summarization Error: {e}")
@@ -687,98 +687,98 @@ def vobiz_webhook():
                 if not session_data or not session_data.get("greeted", False):
                     # TURN 1: Initial greeting
                     bot_reply = "Namaste! Main Calling Agent hoon. Batayein aaj main aapki kaise madad kar sakta hoon?"
-                    audio_filename = f"welcome_{{uuid.uuid4()}}.mp3"
+                    audio_filename = f"welcome_{uuid.uuid4()}.mp3"
                     audio_filepath = os.path.join(AUDIO_DIR, audio_filename)
                     asyncio.run(generate_audio(bot_reply, audio_filepath))
                     audio_url = public_base + "/static/audio/" + audio_filename
                     
                     sessions[call_sid] = {
-                        "history": [{{"role": "system", "content": SYSTEM_PROMPT}}],
+                        "history": [{"role": "system", "content": SYSTEM_PROMPT}],
                         "greeted": True
                     }
                     now_str = datetime.now().strftime('%H:%M:%S')
-                    print(f" [Timing] GREETING turn took {{time.time() - start_time:.2f}}s")
+                    print(f" [Timing] GREETING turn took {time.time() - start_time:.2f}s")
                     add_log("inbound", "New Call Connected", "Played dynamic welcome message.")
                     # Minimal XML for compatibility
-                    vobiz_xml = f'<Response><Play>{{audio_url}}</Play><Record action="{{action_url}}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
-                    print(f" [Response] GREETING XML: {{vobiz_xml}}")
+                    vobiz_xml = f'<Response><Play>{audio_url}</Play><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
+                    print(f" [Response] GREETING XML: {vobiz_xml}")
                     sys.stdout.flush()
-                    return vobiz_xml, 200, {{'Content-Type': 'text/xml'}}
+                    return vobiz_xml, 200, {'Content-Type': 'text/xml'}
 
             # If we reach here, it's a SECONDARY hit (no user speech) but already greeted
             if not recording_url:
                 # Redundant initiation hit (e.g. 'Answer' after 'StartApp')
-                print(f" [Timing] REDUNDANT hit for {{call_sid}} (Event: {{event}}) - Returning Keep-Alive XML")
-                vobiz_xml = f'<Response><Record action="{{action_url}}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
-                print(f" [Response] KEEP-ALIVE XML: {{vobiz_xml}}")
+                print(f" [Timing] REDUNDANT hit for {call_sid} (Event: {event}) - Returning Keep-Alive XML")
+                vobiz_xml = f'<Response><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
+                print(f" [Response] KEEP-ALIVE XML: {vobiz_xml}")
                 sys.stdout.flush()
-                return vobiz_xml, 200, {{'Content-Type': 'text/xml'}}
+                return vobiz_xml, 200, {'Content-Type': 'text/xml'}
             else:
                 # Actual silence during call (Recording URL exists but user_speech is empty)
                 bot_reply = "Aap wahan hain?"
-                print(f"--- SILENCE turn for session {{call_sid}}")
+                print(f"--- SILENCE turn for session {call_sid}")
                 add_log("inbound", "User Silent", "Prompting user to speak.")
-                audio_filename = f"silence_{{uuid.uuid4()}}.mp3"
+                audio_filename = f"silence_{uuid.uuid4()}.mp3"
                 audio_filepath = os.path.join(AUDIO_DIR, audio_filename)
                 asyncio.run(generate_audio(bot_reply, audio_filepath))
                 audio_url = public_base + "/static/audio/" + audio_filename
-                vobiz_xml = f'<Response><Play>{{audio_url}}</Play><Record action="{{action_url}}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
-                print(f" [Response] SILENCE XML: {{vobiz_xml}}")
-                print(f" [Timing] SILENCE: Total turnaround took {{time.time() - start_time:.2f}}s")
+                vobiz_xml = f'<Response><Play>{audio_url}</Play><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
+                print(f" [Response] SILENCE XML: {vobiz_xml}")
+                print(f" [Timing] SILENCE: Total turnaround took {time.time() - start_time:.2f}s")
                 sys.stdout.flush()
-                return vobiz_xml, 200, {{'Content-Type': 'text/xml'}}
+                return vobiz_xml, 200, {'Content-Type': 'text/xml'}
 
         else:
             # Generate response using LLM
             ai_start = time.time()
             bot_reply = get_bot_response(user_speech, session_id=call_sid)
-            print(f" [Timing] AI: Model response took {{time.time() - ai_start:.2f}}s")
+            print(f" [Timing] AI: Model response took {time.time() - ai_start:.2f}s")
 
             # Log this interaction
             add_log("inbound", "User Speech Received", "Processed incoming audio", speech=user_speech, reply=bot_reply)
 
             # TTS Generation
-            audio_filename = f"{{uuid.uuid4()}}.mp3"
+            audio_filename = f"{uuid.uuid4()}.mp3"
             audio_filepath = os.path.join(AUDIO_DIR, audio_filename)
             tts_start = time.time()
             asyncio.run(generate_audio(bot_reply, audio_filepath))
-            print(f" [Timing] TTS: Generation took {{time.time() - tts_start:.2f}}s")
+            print(f" [Timing] TTS: Generation took {time.time() - tts_start:.2f}s")
             audio_url = public_base + "/static/audio/" + audio_filename
             
             if "goodbye" in bot_reply.lower() or "bye" in bot_reply.lower():
-                vobiz_xml = f'<Response><Play>{{audio_url}}</Play><Hangup/></Response>'
+                vobiz_xml = f'<Response><Play>{audio_url}</Play><Hangup/></Response>'
             else:
-                vobiz_xml = f'<Response><Play>{{audio_url}}</Play><Record action="{{action_url}}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
+                vobiz_xml = f'<Response><Play>{audio_url}</Play><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
             
-            print(f" [Response] SPEECH RESPONSE XML: {{vobiz_xml}}")
-            print(f" [Timing] TOTAL WEBHOOK: {{time.time() - start_time:.2f}s}")
+            print(f" [Response] SPEECH RESPONSE XML: {vobiz_xml}")
+            print(f" [Timing] TOTAL WEBHOOK: {time.time() - start_time:.2f}s")
             sys.stdout.flush()
-            return vobiz_xml, 200, {{'Content-Type': 'text/xml'}}
+            return vobiz_xml, 200, {'Content-Type': 'text/xml'}
 
     except Exception as e:
-        print(f"CRITICAL WEBHOOK ERROR: {{e}}")
+        print(f"CRITICAL WEBHOOK ERROR: {e}")
         import traceback
         traceback.print_exc()
         sys.stdout.flush()
         # Fallback XML to prevent hangup
-        return f'<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>', 200, {{'Content-Type': 'application/xml'}}
+        return f'<?xml version="1.0" encoding="UTF-8"?><Response><Hangup/></Response>', 200, {'Content-Type': 'application/xml'}
 
 @app.route('/static/audio/<filename>')
 def serve_audio(filename):
     """Endpoint to serve the generated MP3 files to Vobiz"""
-    print(f"\n--- Audio Request [{{datetime.now().strftime('%H:%M:%S')}}] ---")
-    print(f"File: {{filename}}")
-    print(f"Headers: {{dict(request.headers)}}")
+    print(f"\n--- Audio Request [{datetime.now().strftime('%H:%M:%S')}] ---")
+    print(f"File: {filename}")
+    print(f"Headers: {dict(request.headers)}")
     filepath = os.path.join(AUDIO_DIR, filename)
     if os.path.exists(filepath):
-        print(f"Serving file: {{filepath}}")
+        print(f"Serving file: {filepath}")
         return send_file(filepath, mimetype="audio/mpeg")
-    print(f"File NOT found: {{filepath}}")
+    print(f"File NOT found: {filepath}")
     return "File not found", 404
 
 def make_outbound_call(to_number, from_number, webhook_url):
     """ Function to trigger an outbound call via Vobiz API """
-    url = f"{{VOBIZ_API_BASE_URL}}/Account/{{VOBIZ_ACCOUNT_ID}}/Call/"
+    url = f"{VOBIZ_API_BASE_URL}/Account/{VOBIZ_ACCOUNT_ID}/Call/"
     headers = {
         "X-Auth-ID": VOBIZ_AUTH_ID,
         "X-Auth-Token": VOBIZ_AUTH_TOKEN,
@@ -791,11 +791,11 @@ def make_outbound_call(to_number, from_number, webhook_url):
     }
     try:
         response = requests.post(url, json=payload, headers=headers)
-        print(f"Call API Status Code: {{response.status_code}}")
-        print(f"Call API Response: {{response.text}}")
+        print(f"Call API Status Code: {response.status_code}")
+        print(f"Call API Response: {response.text}")
         return response.json()
     except Exception as e:
-        print(f"Error making outbound call: {{e}}")
+        print(f"Error making outbound call: {e}")
         return None
 
 @app.route('/api/chat', methods=['POST'])
@@ -804,11 +804,11 @@ def handle_chat():
     user_message = data.get('message')
     session_id = data.get('session_id', 'web_chat_default')
     if not user_message:
-        return jsonify({{"status": "error", "message": "Message is required"}}), 400
+        return jsonify({"status": "error", "message": "Message is required"}), 400
     
     bot_reply = get_bot_response(user_message, session_id=session_id)
     add_log("inbound", "Chat Message Received", "Processed text interaction", speech=user_message, reply=bot_reply)
-    return jsonify({{"status": "success", "reply": bot_reply}})
+    return jsonify({"status": "success", "reply": bot_reply})
 
 if __name__ == '__main__':
     # Determine if running in production (e.g., Render)
@@ -821,7 +821,7 @@ if __name__ == '__main__':
     public_url_env = os.environ.get('PUBLIC_URL')
     if public_url_env:
         app.config['PUBLIC_URL'] = public_url_env.rstrip('/')
-        print(f"Using Production Public URL: {{app.config['PUBLIC_URL']}}")
+        print(f"Using Production Public URL: {app.config['PUBLIC_URL']}")
 
     if not is_production:
         # Local development setup
@@ -834,13 +834,13 @@ if __name__ == '__main__':
             public_url = ngrok.connect(5000).public_url
             app.config['PUBLIC_URL'] = public_url
             print(f"\n--- Local Ngrok Tunnel Active ---")
-            print(f"Public URL: {{public_url}}")
-            webhook_url = f"{{public_url}}/vobiz-webhook"
+            print(f"Public URL: {public_url}")
+            webhook_url = f"{public_url}/vobiz-webhook"
             # Sync with Vobiz
             update_vobiz_app(webhook_url)
             app.run(host='0.0.0.0', port=5000, debug=True, use_reloader=False, threaded=True)
         except Exception as e:
-            print(f"Error starting local environment: {{e}}")
+            print(f"Error starting local environment: {e}")
         finally:
             ngrok.kill()
     else:
