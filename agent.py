@@ -17,9 +17,21 @@ import edge_tts
 from flask import Flask, request, send_file, url_for, render_template, jsonify, session, redirect
 
 
+
+
+
+
+
+
 # Force UTF-8 encoding for Windows console to handle Hindi characters
 if sys.stdout.encoding.lower() != 'utf-8':
     sys.stdout = io.TextIOWrapper(sys.stdout.buffer, encoding='utf-8')
+
+
+
+
+
+
 
 
 # Explicitly tell pydub where ffmpeg is
@@ -28,14 +40,32 @@ if ffmpeg_path:
     AudioSegment.converter = ffmpeg_path
 
 
+
+
+
+
+
+
 app = Flask(__name__)
 app.secret_key = "vobiz_super_secret_key_123" # Required for sessions
 app.config['PUBLIC_URL'] = "https://vobiz-agent.onrender.com"
 
 
+
+
+
+
+
+
 # Directory to store generated audio files
 AUDIO_DIR = "static/audio"
 os.makedirs(AUDIO_DIR, exist_ok=True)
+
+
+
+
+
+
 
 
 # Vobiz API Credentials (NEW ACCOUNT)
@@ -45,13 +75,31 @@ VOBIZ_ACCOUNT_ID = VOBIZ_AUTH_ID
 VOBIZ_API_BASE_URL = "https://api.vobiz.ai/api/v1"
 
 
+
+
+
+
+
+
 import threading
 import time
+
+
+
+
+
+
 
 
 # --- Dashboard Data Stores ---
 recent_logs = []
 HISTORY_FILE = "history.json"
+
+
+
+
+
+
 
 
 def load_history():
@@ -62,14 +110,5 @@ def load_history():
         except:
             return []
     return []
-
-
-def save_history(history_data):
-    with open(HISTORY_FILE, "w", encoding="utf-8") as f:
-        json.dump(history_data, f, indent=4)
-
-
-def update_call_record(call_sid, updates):
-    history = load_history()
-    for record in history:
+# Force final commit trigger: Fix hallucination error prapt
 # Force final commit: Fix hallucination error prapt
