@@ -8,12 +8,11 @@ import io
 import time
 import shutil
 import threading
-import static_ffmpeg
-# Ensure ffmpeg is available for pydub (Call this BEFORE importing pydub)
+import static_ffmpeg # Ensure ffmpeg is available for pydub (Call this BEFORE importing pydub)
 static_ffmpeg.add_paths()
 import speech_recognition as sr
 from pydub import AudioSegment
-from datetime import datetimef
+from datetime import datetime
 import edge_tts
 from flask import Flask, request, send_file, url_for, render_template, jsonify, session, redirect
 
@@ -27,7 +26,7 @@ if ffmpeg_path:
     AudioSegment.converter = ffmpeg_path
 
 app = Flask(__name__)
-app.secret_key = "vobiz_super_secret_key_123"  # Required for sessions
+app.secret_key = "vobiz_super_secret_key_123" # Required for sessions
 app.config['PUBLIC_URL'] = "https://vobiz-agent.onrender.com"
 
 # Directory to store generated audio files
@@ -78,25 +77,24 @@ def generate_call_summary(call_sid):
     session_data = sessions.get(call_sid)
     if not session_data or len(session_data.get("history", [])) <= 1:
         return
-
+    
     chat_history = session_data["history"]
     # Only use user/assistant messages, skip system prompt
     conv_text = "\n".join([f"{m['role']}: {m['content']}" for m in chat_history if m['role'] != 'system'])
-
+    
     prompt = f"""Summarize this customer support call and determine the lead status.
-Conversation: {conv_text}
-
-Response format (JSON only):
-{
-  "summary": "Short 1-sentence summary",
-  "status": "Hot" | "Warm" | "Cold"
-}
-
-Rules:
-- Hot: User is very interested, asked for prices, or wants to buy.
-- Warm: User is interested but needs time/more info.
-- Cold: User is not interested or wrong number.
-"""
+    Conversation: {conv_text}
+    Response format (JSON only):
+    {{
+        "summary": "Short 1-sentence summary",
+        "status": "Hot" | "Warm" | "Cold"
+    }}
+    Rules:
+    - Hot: User is very interested, asked for prices, or wants to buy.
+    - Warm: User is interested but needs time/more info.
+    - Cold: User is not interested or wrong number.
+    """
+    
     if GROQ_API_KEY:
         try:
             url = "https://api.groq.com/openai/v1/chat/completions"
@@ -107,7 +105,13 @@ Rules:
                 "max_tokens": 150,
                 "response_format": {"type": "json_object"}
             }
-            # Skipping implementation in JS for brevity, just defining the string here
+            response = requests.post(url, headers=headers, json=data, timeout=10)
+            if response.status_code == 200:
+                result = json.loads(response.json()['choices'][0]['message']['content'])
+                update_call_record(call_sid, {
+                    "summary": result.get("summary", "No summary available"),
+                    "status": result.get("status", "Warm")
+                })
         except Exception as e:
             print(f"Summarization Error: {e}")
 
@@ -129,7 +133,8 @@ def save_users(users_data):
 
 def get_logged_in_user():
     user_id = session.get('user_id')
-    if not user_id: return None
+    if not user_id:
+        return None
     users = load_users()
     return next((u for u in users if u['id'] == user_id), None)
 
@@ -143,7 +148,7 @@ def update_vobiz_app(webhook_url):
         "X-Auth-Token": VOBIZ_AUTH_TOKEN,
         "Content-Type": "application/json"
     }
-
+    
     try:
         # 1. Check for existing applications
         url = f"{VOBIZ_API_BASE_URL}/account/{VOBIZ_ACCOUNT_ID}/applications"
@@ -156,7 +161,7 @@ def update_vobiz_app(webhook_url):
         except Exception:
             print(f"Failed to parse JSON response: {resp.text[:500]}")
             apps = []
-
+            
         app_id = None
         if apps:
             # Look for our app or take the first one
@@ -166,7 +171,7 @@ def update_vobiz_app(webhook_url):
                     break
             if not app_id:
                 app_id = apps[0].get('id') or apps[0].get('app_id')
-
+        
         if app_id:
             print(f"Updating existing Vobiz Application: {app_id}")
             put_url = f"{VOBIZ_API_BASE_URL}/account/{VOBIZ_ACCOUNT_ID}/applications/{app_id}"
@@ -190,7 +195,7 @@ def update_vobiz_app(webhook_url):
             print(f"Create app response: {post_resp.status_code}")
             if post_resp.status_code not in [200, 201]:
                 print(f"Create failed: {post_resp.text}")
-
+                
     except Exception as e:
         print(f"Error syncing Vobiz Application: {e}")
 
@@ -203,7 +208,6 @@ HF_CHAT_URL = "https://router.huggingface.co/v1/chat/completions"
 GROQ_API_KEY = "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"
 # Deepgram key from: https://console.deepgram.com/
 DEEPGRAM_API_KEY = "f3cc5ea0539b9cf2b6908c06575ebab14ab5d604"
-
 # ElevenLabs Credentials (Premium Voice)
 ELEVENLABS_API_KEY = "0e282bcdde94f9e4c55846f8b5b0a162ae700e39edd079cbc9f4d8ed729a26f0" # Added your key
 ELEVENLABS_VOICE_ID = "" # Add your Voice ID here (e.g., '21m00Tcm4TlvDq8ikWAM')
@@ -214,12 +218,10 @@ CURRENT_TTS_ENGINE = "edge"  # Values: "edge" or "eleven"
 # System Prompt for the AI
 def get_system_prompt():
     base_prompt = """You are a helpful and professional Calling Agent AI. Your name is Calling Agent. You assist users with general inquiries and demonstrate premium AI calling capabilities.
+    IMPORTANT: You must ONLY speak and reply in Romanized Hindi (Hinglish). For example: "Namaste, main Calling Agent hoon. Batanye aaj main aapki kaise madad kar sakta hoon?". Do not use pure English words unless they are common technical terms.
+    Your goal is to be highly responsive, friendly, and helpful. Guide the conversation naturally. If asked what you do, explain that you are an elite AI infrastructure designed to handle phone calls seamlessly.
+    CRITICAL RULE: You are talking on the phone. Keep responses EXTREMELY short and punchy. Maximum 10-15 words per response! Do not give long speeches. Answer questions naturally and keep the conversation going like a friendly phone agent."""
     
-IMPORTANT: You must ONLY speak and reply in Romanized Hindi (Hinglish). For example: "Namaste, main Calling Agent hoon. Batanye aaj main aapki kaise madad kar sakta hoon?". Do not use pure English words unless they are common technical terms.
-Your goal is to be highly responsive, friendly, and helpful. Guide the conversation naturally. If asked what you do, explain that you are an elite AI infrastructure designed to handle phone calls seamlessly.
-
-CRITICAL RULE: You are talking on the phone. Keep responses EXTREMELY short and punchy. Maximum 10-15 words per response! Do not give long speeches. Answer questions naturally and keep the conversation going like a friendly phone agent."""
-
     # RAG Injection: Load company knowledge
     try:
         with open("knowledge_base.json", "r", encoding="utf-8") as f:
@@ -264,14 +266,14 @@ def get_bot_response(user_text, session_id="default"):
     
     session_data = sessions[session_id]
     history = session_data["history"]
-
+    
     # Add user message to history
     history.append({"role": "user", "content": user_text})
-
+    
     # Keep history from growing too large
     if len(history) > 11:
         session_data["history"] = [history[0]] + history[-10:]
-
+        
     # Use GROQ if key is available (Sub-second latency)
     if GROQ_API_KEY:
         try:
@@ -325,6 +327,7 @@ def get_bot_response(user_text, session_id="default"):
         else:
             print(f"HF API Error: {response.status_code} - {response.text}")
             return "I am sorry, my AI service is currently unavailable."
+            
     except Exception as e:
         print(f"AI Model Exception: {e}")
         return "I am sorry, I encountered an error while processing your request."
@@ -341,7 +344,7 @@ async def generate_elevenlabs_audio(text, filename):
         print("ElevenLabs API Key missing! Falling back to Edge-TTS...")
         await generate_edge_audio(text, filename)
         return
-
+        
     url = f"https://api.elevenlabs.io/v1/text-to-speech/{ELEVENLABS_VOICE_ID or '21m00Tcm4TlvDq8ikWAM'}"
     headers = {
         "Accept": "audio/mpeg",
@@ -361,6 +364,7 @@ async def generate_elevenlabs_audio(text, filename):
         if response.status_code == 200:
             with open(filename, 'wb') as f:
                 f.write(response.content)
+            
             # --- AMPLIFY AUDIO VOL (Because 11Labs is sometimes quiet over phone lines) ---
             try:
                 audio = AudioSegment.from_file(filename)
@@ -368,7 +372,7 @@ async def generate_elevenlabs_audio(text, filename):
                 louder_audio.export(filename, format="mp3")
                 print(" [Notice] ElevenLabs Audio Amplified by +10dB")
             except Exception as vol_e:
-                 print(f" [Error] Could not amplify audio: {vol_e}")
+                print(f" [Error] Could not amplify audio: {vol_e}")
         else:
             print(f"ElevenLabs Error {response.status_code}: {response.text}. Falling back...")
             await generate_edge_audio(text, filename)
@@ -453,8 +457,8 @@ def transcribe_audio_url(audio_url):
         with sr.AudioFile(wav_io) as source:
             audio_content = recognizer.record(source)
             text = recognizer.recognize_google(audio_content, language="hi-IN")
-        
-        print(f" [Timing] STT: Google API took {time.time() - r_start:.2f}s")
+            print(f" [Timing] STT: Google API took {time.time() - r_start:.2f}s")
+            
         print(f" [Timing] STT: Total function took {time.time() - start_time:.2f}s")
         sys.stdout.flush()
         return text
@@ -501,8 +505,10 @@ def login():
     data = request.json
     username = data.get('username')
     password = data.get('password')
+    
     users = load_users()
     user = next((u for u in users if u['username'] == username and u['password'] == password), None)
+    
     if user:
         session['user_id'] = user['id']
         return jsonify({"status": "success", "user": user})
@@ -515,12 +521,16 @@ def logout():
 
 @app.route('/api/call', methods=['POST'])
 def trigger_call():
-    if not get_logged_in_user(): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not get_logged_in_user():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
     data = request.json
     to_num = data.get('to', '').strip()
     from_num = data.get('from', '').strip()
+    
     public_base = app.config.get('PUBLIC_URL', request.host_url.rstrip('/'))
     webhook_url = f"{public_base}/vobiz-webhook"
+    
     return initiate_single_call(to_num, from_num, webhook_url)
 
 def initiate_single_call(to_num, from_num, webhook_url):
@@ -530,7 +540,7 @@ def initiate_single_call(to_num, from_num, webhook_url):
         
     if not to_num or not from_num:
         return jsonify({"status": "error", "message": "Missing to or from number"}), 400
-
+    
     add_log("outbound", "Initiated Outbound Call", f"Calling {to_num} from {from_num}")
     res = make_outbound_call(to_num, from_num, webhook_url)
     
@@ -559,29 +569,37 @@ def bulk_call_loop(numbers, from_num, webhook_url):
 
 @app.route('/api/bulk-call', methods=['POST'])
 def trigger_bulk_call():
-    if not get_logged_in_user(): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not get_logged_in_user():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
     data = request.json
     numbers = data.get('numbers', [])
     from_num = data.get('from', '').strip()
+    
     if not numbers:
         return jsonify({"status": "error", "message": "No numbers provided"}), 400
-    
+        
     public_base = app.config.get('PUBLIC_URL', request.host_url.rstrip('/'))
     webhook_url = f"{public_base}/vobiz-webhook"
+    
     threading.Thread(target=bulk_call_loop, args=(numbers, from_num, webhook_url)).start()
     return jsonify({"status": "success", "message": f"Bulk session started for {len(numbers)} numbers"})
 
 @app.route('/api/history', methods=['GET'])
 def get_history():
-    if not get_logged_in_user(): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not get_logged_in_user():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
     return jsonify(load_history())
 
 @app.route('/api/history/update', methods=['POST'])
 def update_history_status():
-    if not get_logged_in_user(): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not get_logged_in_user():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
     data = request.json
     call_sid = data.get('call_sid')
     new_status = data.get('status')
+    
     if call_sid and new_status:
         history = load_history()
         for record in history:
@@ -594,7 +612,9 @@ def update_history_status():
 
 @app.route('/api/settings/tts', methods=['POST'])
 def update_tts_settings():
-    if not get_logged_in_user(): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not get_logged_in_user():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
+        
     global CURRENT_TTS_ENGINE
     data = request.json
     engine = data.get('engine')
@@ -606,7 +626,8 @@ def update_tts_settings():
 
 @app.route('/api/settings/current', methods=['GET'])
 def get_current_settings():
-    if not get_logged_in_user(): return jsonify({"status": "error", "message": "Unauthorized"}), 401
+    if not get_logged_in_user():
+        return jsonify({"status": "error", "message": "Unauthorized"}), 401
     return jsonify({
         "tts_engine": CURRENT_TTS_ENGINE
     })
@@ -626,14 +647,14 @@ def vobiz_webhook():
     call_sid = request.values.get("CallUUID") or request.values.get("CallSid") or "default"
     
     print(f"\n--- Webhook Hit [{now_str}] | Event: {event} | SID: {call_sid} ---")
-    print(f" Values: {dict(request.values)}")
+    print(f"  Values: {dict(request.values)}")
     sys.stdout.flush()
 
     # If the call is finished, stop responding and finalize history
     if event in ["Hangup", "Disconnect", "completed", "Busy", "NoAnswer"]:
         print(f" [Notice] Call finished for {call_sid}. Event: {event}")
         recording_url = request.values.get("RecordUrl", request.values.get("RecordFile", "")).strip()
-
+        
         # FINALIZATION: Save recording and trigger AI summary
         if call_sid:
             updates = {}
@@ -642,7 +663,7 @@ def vobiz_webhook():
             update_call_record(call_sid, updates)
             # Run summarization in background thread
             threading.Thread(target=generate_call_summary, args=(call_sid,)).start()
-
+            
         return '<?xml version="1.0" encoding="UTF-8"?><Response></Response>', 200, {'Content-Type': 'application/xml'}
 
     try:
@@ -652,7 +673,7 @@ def vobiz_webhook():
             public_url = public_url.replace("http://", "https://", 1)
         public_base = public_url.rstrip('/')
         action_url = public_base + "/vobiz-webhook"
-
+        
         # Vobiz sends 'RecordUrl' or 'RecordFile'
         recording_url = request.values.get("RecordUrl", request.values.get("RecordFile", "")).strip()
         user_speech = ""
@@ -664,8 +685,10 @@ def vobiz_webhook():
             # --- Anti-Hallucination Filter ---
             # Whisper often hallucinates these words when there is background noise but no real speech
             hallucination_triggers = [
-                "prapt", "pradesh", "prastuti", "kar do", "ok", "hello", "ha", "haan", "hmm", "haanji", "hello hello"
+                "prapt", "pradesh", "prastuti", "kar do", "ok", "hello", "ha", "haan", "hmm", "haanji", "hello hello",
+                "प्राप्त", "प्रदेश", "प्रस्तुति"
             ]
+            
             if user_speech:
                 cleaned_speech = user_speech.lower().strip()
                 # Check if the entire speech is just a repeated hallucination word
@@ -699,44 +722,44 @@ def vobiz_webhook():
                     now_str = datetime.now().strftime('%H:%M:%S')
                     print(f" [Timing] GREETING turn took {time.time() - start_time:.2f}s")
                     add_log("inbound", "New Call Connected", "Played dynamic welcome message.")
+                    
                     # Minimal XML for compatibility
                     vobiz_xml = f'<Response><Play>{audio_url}</Play><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
                     print(f" [Response] GREETING XML: {vobiz_xml}")
                     sys.stdout.flush()
                     return vobiz_xml, 200, {'Content-Type': 'text/xml'}
-
-            # If we reach here, it's a SECONDARY hit (no user speech) but already greeted
-            if not recording_url:
-                # Redundant initiation hit (e.g. 'Answer' after 'StartApp')
-                print(f" [Timing] REDUNDANT hit for {call_sid} (Event: {event}) - Returning Keep-Alive XML")
-                vobiz_xml = f'<Response><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
-                print(f" [Response] KEEP-ALIVE XML: {vobiz_xml}")
-                sys.stdout.flush()
-                return vobiz_xml, 200, {'Content-Type': 'text/xml'}
-            else:
-                # Actual silence during call (Recording URL exists but user_speech is empty)
-                bot_reply = "Aap wahan hain?"
-                print(f"--- SILENCE turn for session {call_sid}")
-                add_log("inbound", "User Silent", "Prompting user to speak.")
-                audio_filename = f"silence_{uuid.uuid4()}.mp3"
-                audio_filepath = os.path.join(AUDIO_DIR, audio_filename)
-                asyncio.run(generate_audio(bot_reply, audio_filepath))
-                audio_url = public_base + "/static/audio/" + audio_filename
-                vobiz_xml = f'<Response><Play>{audio_url}</Play><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
-                print(f" [Response] SILENCE XML: {vobiz_xml}")
-                print(f" [Timing] SILENCE: Total turnaround took {time.time() - start_time:.2f}s")
-                sys.stdout.flush()
-                return vobiz_xml, 200, {'Content-Type': 'text/xml'}
-
+                
+                # If we reach here, it's a SECONDARY hit (no user speech) but already greeted
+                if not recording_url:
+                    # Redundant initiation hit (e.g. 'Answer' after 'StartApp')
+                    print(f" [Timing] REDUNDANT hit for {call_sid} (Event: {event}) - Returning Keep-Alive XML")
+                    vobiz_xml = f'<Response><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
+                    print(f" [Response] KEEP-ALIVE XML: {vobiz_xml}")
+                    sys.stdout.flush()
+                    return vobiz_xml, 200, {'Content-Type': 'text/xml'}
+                else:
+                    # Actual silence during call (Recording URL exists but user_speech is empty)
+                    bot_reply = "Aap wahan hain?"
+                    print(f"--- SILENCE turn for session {call_sid}")
+                    add_log("inbound", "User Silent", "Prompting user to speak.")
+                    audio_filename = f"silence_{uuid.uuid4()}.mp3"
+                    audio_filepath = os.path.join(AUDIO_DIR, audio_filename)
+                    asyncio.run(generate_audio(bot_reply, audio_filepath))
+                    audio_url = public_base + "/static/audio/" + audio_filename
+                    vobiz_xml = f'<Response><Play>{audio_url}</Play><Record action="{action_url}" timeout="1" playBeep="false" silenceTimeout="1"/></Response>'
+                    print(f" [Response] SILENCE XML: {vobiz_xml}")
+                    print(f" [Timing] SILENCE: Total turnaround took {time.time() - start_time:.2f}s")
+                    sys.stdout.flush()
+                    return vobiz_xml, 200, {'Content-Type': 'text/xml'}
         else:
             # Generate response using LLM
             ai_start = time.time()
             bot_reply = get_bot_response(user_speech, session_id=call_sid)
             print(f" [Timing] AI: Model response took {time.time() - ai_start:.2f}s")
-
+            
             # Log this interaction
             add_log("inbound", "User Speech Received", "Processed incoming audio", speech=user_speech, reply=bot_reply)
-
+            
             # TTS Generation
             audio_filename = f"{uuid.uuid4()}.mp3"
             audio_filepath = os.path.join(AUDIO_DIR, audio_filename)
@@ -754,7 +777,7 @@ def vobiz_webhook():
             print(f" [Timing] TOTAL WEBHOOK: {time.time() - start_time:.2f}s")
             sys.stdout.flush()
             return vobiz_xml, 200, {'Content-Type': 'text/xml'}
-
+            
     except Exception as e:
         print(f"CRITICAL WEBHOOK ERROR: {e}")
         import traceback
@@ -803,9 +826,10 @@ def handle_chat():
     data = request.json
     user_message = data.get('message')
     session_id = data.get('session_id', 'web_chat_default')
+    
     if not user_message:
         return jsonify({"status": "error", "message": "Message is required"}), 400
-    
+        
     bot_reply = get_bot_response(user_message, session_id=session_id)
     add_log("inbound", "Chat Message Received", "Processed text interaction", speech=user_message, reply=bot_reply)
     return jsonify({"status": "success", "reply": bot_reply})
@@ -815,7 +839,7 @@ if __name__ == '__main__':
     # Render provides a PORT environment variable
     port = int(os.environ.get('PORT', 5000))
     is_production = 'PORT' in os.environ
-    
+
     # Get public URL from environment variable if available
     # For Render, this would be your https://your-app.onrender.com
     public_url_env = os.environ.get('PUBLIC_URL')
@@ -828,7 +852,6 @@ if __name__ == '__main__':
         from pyngrok import ngrok
         import threading
         import time
-
         try:
             # Start ngrok tunnel
             public_url = ngrok.connect(5000).public_url
